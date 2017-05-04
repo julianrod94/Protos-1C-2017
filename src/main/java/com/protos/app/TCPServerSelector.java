@@ -30,7 +30,7 @@ public class TCPServerSelector {
         while (true) { // Run forever, processing available I/O operations
             // Wait for some channel to be ready (or timeout)
             if (selector.select(TIMEOUT) == 0) { // returns # of ready chans
-                System.out.print(".");
+               // System.out.print(".");
                 continue;
             }
             // Get iterator on set of keys with I/O to process
@@ -43,7 +43,6 @@ public class TCPServerSelector {
                 }
                 if (key.isConnectable()) {
                     protocol.handleConnect(key);
-                    System.out.println("connected");
                 }
                 // Client socket channel has pending data?
                 if (key.isReadable()) {

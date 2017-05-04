@@ -2,6 +2,7 @@ package com.protos.app;
 
 import javax.xml.crypto.KeySelector;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -12,7 +13,7 @@ public class EchoSelectorProtocol implements TCPProtocol {
     private int bufSize; // Size of I/O buffer
     //TODO Don't hardcode it
     private static String address = "localhost";
-    private static int port = 7666;
+    private static int port = 7667;
 
 
     public EchoSelectorProtocol(int bufSize) {
@@ -26,16 +27,33 @@ public class EchoSelectorProtocol implements TCPProtocol {
         //Open server channel
         SocketChannel srvrChan = SocketChannel.open();
         srvrChan.configureBlocking(false);
-        //attempt connection
-        srvrChan.connect(new InetSocketAddress(address, port));
-
         Connection clntCon = new Connection(srvrChan,1);
         Connection srvrCon = new Connection(clntChan,clntCon.getSourceBuffer(),1);
         clntCon.setDestinationBuffer(srvrCon.getSourceBuffer());
 
-        // Register the selector with new channel for read and attach byte buffer
+        //attempt connection
+        if (srvrChan.connect(new InetSocketAddress(address, port))){
+            System.out.println("Connected instantly");
+            key.interestOps(SelectionKey.OP_READ);
+            srvrChan.register(key.selector(), SelectionKey.OP_READ, srvrCon);
+        }
+
+        // Register channels to selectors + Connection attachment
         srvrChan.register(key.selector(), SelectionKey.OP_CONNECT, srvrCon);
-        clntChan.register(key.selector(), SelectionKey.OP_READ, clntCon);
+        clntChan.register(key.selector(), 0, clntCon);
+    }
+
+    public void handleConnect (SelectionKey key) throws IOException{
+        SocketChannel channel = (SocketChannel) key.channel();
+        if (!channel.finishConnect()){
+            //Failed Connection
+             channel.close();
+            ((Connection)key.attachment()).getChannel().close();
+        }else{
+            // Connection established & both channels ready to read now
+            key.interestOps(SelectionKey.OP_READ);
+            ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_READ);
+        }
     }
 
     public void handleRead(SelectionKey key) throws IOException {
@@ -44,6 +62,7 @@ public class EchoSelectorProtocol implements TCPProtocol {
         ByteBuffer buf = ((Connection) key.attachment()).getDestinationBuffer();
         long bytesRead = channel.read(buf);
         if (bytesRead == -1) { // Did the other end close?
+            System.out.println("Trouble reading");
             channel.close();
         } else if (bytesRead > 0) {
             // Indicate via key that reading/writing are both of interest now.
@@ -52,20 +71,11 @@ public class EchoSelectorProtocol implements TCPProtocol {
                 key.interestOps(SelectionKey.OP_READ | key.interestOps());
             }else{
                 //If destination buffer is full
-                key.interestOps(key.interestOps());
+                key.interestOps(key.interestOps() & SelectionKey.OP_WRITE);
+
             }
             ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_WRITE |
                     ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps());
-        }
-    }
-
-    public void handleConnect (SelectionKey key) throws IOException{
-        SocketChannel channel = (SocketChannel) key.channel();
-        if (!channel.isConnected()){
-            ((Connection)key.attachment()).getChannel().close();
-        }else{
-            key.interestOps(SelectionKey.OP_READ);
-//            channel.register(key.selector(),SelectionKey.OP_READ,key.attachment());
         }
     }
 
@@ -87,7 +97,8 @@ public class EchoSelectorProtocol implements TCPProtocol {
             ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_READ |
                     ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps());
         }
-        buf.flip();
+
+        //buf.flip(); after testing, determined it was not needed
         buf.compact(); // Make room for more data to be read in
     }
 }
