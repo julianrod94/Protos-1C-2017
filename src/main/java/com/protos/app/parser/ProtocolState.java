@@ -10,7 +10,7 @@ import java.nio.ByteBuffer;
  */
 public class ProtocolState implements State {
 
-    private StringBuffer protocol;
+    private StringBuffer protocol = new StringBuffer();
     private boolean finishedParsingFirstSlash = false;
     boolean finishedParsing = false;
 
@@ -25,7 +25,7 @@ public class ProtocolState implements State {
         //Parses protocol and "://"
         while(queue.hasRemaining() && !finishedParsing){
             char current = (char) queue.get();
-            if(((current >= 'A' && current <= 'Z') || (current >= 'a' && current <= 'b') || (current == ':'))){
+            if(((current >= 'A' && current <= 'Z') || (current >= 'a' && current <= 'z') || (current == ':'))){
                 protocol.append(current);
             }
             //makes sure there is only one :

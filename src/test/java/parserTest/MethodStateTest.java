@@ -1,10 +1,8 @@
 package parserTest;
 
 import com.protos.app.exceptions.UnsupportedMethodException;
-import com.protos.app.parser.Context;
-import com.protos.app.parser.MethodState;
-import com.protos.app.parser.State;
-import com.protos.app.parser.URLState;
+import com.protos.app.exceptions.UnsupportedProtocolException;
+import com.protos.app.parser.*;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
