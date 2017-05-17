@@ -27,7 +27,8 @@ public class PropCreator {
             prop.setProperty("l33t","on");
             prop.setProperty("rotate","off");
             prop.setProperty("imgbuffsize","4096");
-            prop.setProperty("conbuffsize","1");
+            prop.setProperty("IObuffsize","1");
+            prop.setProperty("Timeout","3000");
             prop.setProperty("defbuff","256");
 
             // save properties to project root folder

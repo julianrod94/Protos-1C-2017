@@ -6,10 +6,12 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.util.Iterator;
+import java.util.Properties;
 
 public class TCPServerSelector {
     private static final int BUFSIZE = 256; // Buffer size (bytes)
-    private static final int TIMEOUT = 3000; // Wait timeout (milliseconds)
+    // lo haog variable?
+    private static int TIMEOUT; // Wait timeout (milliseconds)
 
     public static void main(String[] args) throws IOException {
         if (args.length < 1) { // Test for correct # of args
@@ -31,8 +33,10 @@ public class TCPServerSelector {
         listnChannel.register(selector, SelectionKey.OP_ACCEPT);
         adminChannel.register(selector, SelectionKey.OP_ACCEPT);
 
+
         // Create a handler that will implement the protocol
-        TCPProtocol protocol = new EchoSelectorProtocol(BUFSIZE);
+        TCPProtocol protocol = new EchoSelectorProtocol(Integer.parseInt(Config.getInstance().get("IObuffsize")));
+        TIMEOUT = Integer.parseInt(Config.getInstance().get("Timeout"));
         while (true) { // Run forever, processing available I/O operations
             // Wait for some channel to be ready (or timeout)
             if (selector.select(TIMEOUT) == 0) { // returns # of ready chans

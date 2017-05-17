@@ -14,12 +14,18 @@ public class EchoSelectorProtocol implements TCPProtocol {
     private int bufSize; // Size of I/O buffer
     //TODO Don't hardcode it
     private static String address = "localhost";
-    private static int port = 7666;
-    private static int adminport = 7900;
+    private static int port;
+    private static int adminport;
 
+
+    public void setBufSize(int bufSize){
+        this.bufSize=bufSize;
+    }
 
     public EchoSelectorProtocol(int bufSize) {
         this.bufSize = bufSize;
+        this.port = Integer.parseInt(Config.getInstance().get("serverport"));
+        this.adminport = Integer.parseInt(Config.getInstance().get("adminport"));
     }
 
     public void handleAccept(SelectionKey key) throws IOException {
@@ -30,16 +36,16 @@ public class EchoSelectorProtocol implements TCPProtocol {
 
         if (((ServerSocketChannel) key.channel()).socket().getLocalPort() == adminport){
             //LOG admin attempted connection.
-            Connection unique = new Connection(clntChan, 4096, "Admin");
-            unique.setDestinationBuffer(ByteBuffer.allocate(4096));
+            Connection unique = new Connection(clntChan, bufSize, "Admin");
+            unique.setDestinationBuffer(ByteBuffer.allocate(bufSize));
             clntChan.register(key.selector(),SelectionKey.OP_READ,unique);
 
         }else{
             //Open server channel
             SocketChannel srvrChan = SocketChannel.open();
             srvrChan.configureBlocking(false);
-            Connection clntCon = new Connection( srvrChan,4096, "Client");
-            Connection srvrCon = new Connection(clntChan,clntCon.getSourceBuffer(),4096, "Server");
+            Connection clntCon = new Connection( srvrChan,bufSize, "Client");
+            Connection srvrCon = new Connection(clntChan,clntCon.getSourceBuffer(),bufSize, "Server");
             clntCon.setDestinationBuffer(srvrCon.getSourceBuffer());
 
             //attempt connection
