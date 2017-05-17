@@ -15,16 +15,22 @@ public class TCPServerSelector {
         if (args.length < 1) { // Test for correct # of args
             throw new IllegalArgumentException("Parameter(s): <Port> ...");
         }
+
+        Config.getInstance().load();
         // Create a selector to multiplex listening sockets and connections
         Selector selector = Selector.open();
         // Create listening socket channel for each port and register selector
-        for (String arg : args) {
-            ServerSocketChannel listnChannel = ServerSocketChannel.open();
-            listnChannel.socket().bind(new InetSocketAddress(Integer.parseInt(arg)));
-            listnChannel.configureBlocking(false); // must be nonblocking to register
-            // Register selector with channel. The returned key is ignored
-            listnChannel.register(selector, SelectionKey.OP_ACCEPT);
-        }
+
+        ServerSocketChannel listnChannel = ServerSocketChannel.open();
+        listnChannel.socket().bind(new InetSocketAddress(Integer.parseInt(Config.getInstance().get("serverport"))));
+        listnChannel.configureBlocking(false); // must be nonblocking to register
+        ServerSocketChannel adminChannel = ServerSocketChannel.open();
+        adminChannel.socket().bind(new InetSocketAddress(Integer.parseInt(Config.getInstance().get("adminport"))));
+        adminChannel.configureBlocking(false);
+        // Register selector with channel. The returned key is ignored
+        listnChannel.register(selector, SelectionKey.OP_ACCEPT);
+        adminChannel.register(selector, SelectionKey.OP_ACCEPT);
+
         // Create a handler that will implement the protocol
         TCPProtocol protocol = new EchoSelectorProtocol(BUFSIZE);
         while (true) { // Run forever, processing available I/O operations
@@ -36,16 +42,18 @@ public class TCPServerSelector {
             // Get iterator on set of keys with I/O to process
             Iterator<SelectionKey> keyIter = selector.selectedKeys().iterator();
             while (keyIter.hasNext()) {
+                System.out.println(selector.keys().size());
                 SelectionKey key = keyIter.next(); // Key is bit mask
                 // Server socket channel has pending connection requests?
                 if (key.isAcceptable()) {
                     protocol.handleAccept(key);
                 }
                 if (key.isConnectable()) {
+                    System.out.println("Connecting");
                     protocol.handleConnect(key);
                 }
                 // Client socket channel has pending data?
-                if (key.isReadable()) {
+                if (key.isValid() && key.isReadable()) {
                     protocol.handleRead(key);
                 }
                 // Client socket channel is available for writing and

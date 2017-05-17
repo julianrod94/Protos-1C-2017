@@ -7,20 +7,25 @@ import java.nio.channels.SocketChannel;
  * Created by julian on 20/04/17.
  */
 public class Connection {
+    private String  type;
     private SocketChannel channel;
     private ByteBuffer sourceBuffer;
     private ByteBuffer destinationBuffer;
 
-    public Connection(SocketChannel channel, int bufferSize) {
+    public Connection(SocketChannel channel, int bufferSize, String type) {
+        this.type = type;
         this.channel = channel;
         this.sourceBuffer = ByteBuffer.allocate(bufferSize);
     }
 
-    public Connection(SocketChannel channel, ByteBuffer destinationBuffer, int bufferSize) {
+    public Connection(SocketChannel channel, ByteBuffer destinationBuffer, int bufferSize, String type) {
+        this.type =  type;
         this.channel = channel;
         this.destinationBuffer = destinationBuffer;
         this.sourceBuffer = ByteBuffer.allocate(bufferSize);
     }
+
+    public String getType() { return type; }
 
     public SocketChannel getChannel() {
         return channel;

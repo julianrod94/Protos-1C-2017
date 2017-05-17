@@ -8,12 +8,14 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
 
 public class EchoSelectorProtocol implements TCPProtocol {
     private int bufSize; // Size of I/O buffer
     //TODO Don't hardcode it
     private static String address = "localhost";
-    private static int port = 7667;
+    private static int port = 7666;
+    private static int adminport = 7900;
 
 
     public EchoSelectorProtocol(int bufSize) {
@@ -24,58 +26,93 @@ public class EchoSelectorProtocol implements TCPProtocol {
         SocketChannel clntChan = ((ServerSocketChannel) key.channel()).accept();
         clntChan.configureBlocking(false); // Must be nonblocking to register
 
-        //Open server channel
-        SocketChannel srvrChan = SocketChannel.open();
-        srvrChan.configureBlocking(false);
-        Connection clntCon = new Connection(srvrChan,1);
-        Connection srvrCon = new Connection(clntChan,clntCon.getSourceBuffer(),1);
-        clntCon.setDestinationBuffer(srvrCon.getSourceBuffer());
+        System.out.println("Socket : " + ((ServerSocketChannel) key.channel()).socket().getLocalPort());
 
-        //attempt connection
-        if (srvrChan.connect(new InetSocketAddress(address, port))){
-            System.out.println("Connected instantly");
-            key.interestOps(SelectionKey.OP_READ);
-            srvrChan.register(key.selector(), SelectionKey.OP_READ, srvrCon);
+        if (((ServerSocketChannel) key.channel()).socket().getLocalPort() == adminport){
+            //LOG admin attempted connection.
+            Connection unique = new Connection(clntChan, 4096, "Admin");
+            unique.setDestinationBuffer(ByteBuffer.allocate(4096));
+            clntChan.register(key.selector(),SelectionKey.OP_READ,unique);
+
+        }else{
+            //Open server channel
+            SocketChannel srvrChan = SocketChannel.open();
+            srvrChan.configureBlocking(false);
+            Connection clntCon = new Connection( srvrChan,4096, "Client");
+            Connection srvrCon = new Connection(clntChan,clntCon.getSourceBuffer(),4096, "Server");
+            clntCon.setDestinationBuffer(srvrCon.getSourceBuffer());
+
+            //attempt connection
+            if (srvrChan.connect(new InetSocketAddress("foro.comunidadargentum.com", 80))){
+                System.out.println("Connected instantly");
+                key.interestOps(SelectionKey.OP_READ);
+                srvrChan.register(key.selector(), SelectionKey.OP_READ, srvrCon);
+            }
+
+            // Register channels to selectors + Connection attachment
+            srvrChan.register(key.selector(), SelectionKey.OP_CONNECT, srvrCon);
+            clntChan.register(key.selector(), 0, clntCon);
         }
-
-        // Register channels to selectors + Connection attachment
-        srvrChan.register(key.selector(), SelectionKey.OP_CONNECT, srvrCon);
-        clntChan.register(key.selector(), 0, clntCon);
     }
 
-    public void handleConnect (SelectionKey key) throws IOException{
+    public void handleConnect (SelectionKey key)  /*throws IOException*/{
         SocketChannel channel = (SocketChannel) key.channel();
-        if (!channel.finishConnect()){
-            //Failed Connection
-             channel.close();
-            ((Connection)key.attachment()).getChannel().close();
-        }else{
-            // Connection established & both channels ready to read now
-            key.interestOps(SelectionKey.OP_READ);
-            ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_READ);
+        try{
+            if (!channel.finishConnect()){
+                //Failed Connection
+                channel.close();
+
+                ((Connection)key.attachment()).getChannel().close();
+            }else{
+                // Connection established & both channels ready to read now
+                key.interestOps(SelectionKey.OP_READ);
+                ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_READ);
+            }
+        }catch(IOException e){
+            System.out.println("Catched exception in handleconnect");
+            //channel.close();
+            //((Connection)key.attachment()).getChannel().close();
         }
     }
 
     public void handleRead(SelectionKey key) throws IOException {
         // Client socket channel has pending data
+
+        if(((Connection)key.attachment()).getType().compareTo("Admin") == 0){
+            System.out.println("Aca entra nico");
+        }
         SocketChannel channel = (SocketChannel) key.channel();
         ByteBuffer buf = ((Connection) key.attachment()).getDestinationBuffer();
-        long bytesRead = channel.read(buf);
+        System.out.println("Reading from :  " + ((Connection)key.attachment()).getType());
+        long bytesRead = 0;
+        try{
+             bytesRead = channel.read(buf);
+        }catch(IOException e){
+            bytesRead=-1;
+            e.printStackTrace();
+        }
+        //System.out.println(new String( buf.array(), Charset.forName("UTF-8")));
         if (bytesRead == -1) { // Did the other end close?
-            System.out.println("Trouble reading");
+            key.cancel();
             channel.close();
+            System.out.println("Closed Connection  by   " + ((Connection)key.attachment()).getType());
         } else if (bytesRead > 0) {
             // Indicate via key that reading/writing are both of interest now.
-            if(buf.remaining()!=0){
+            if (buf.remaining() != 0) {
                 //If destination buffer has some space left
                 key.interestOps(SelectionKey.OP_READ | key.interestOps());
-            }else{
+            } else {
                 //If destination buffer is full
                 key.interestOps(key.interestOps() & SelectionKey.OP_WRITE);
 
             }
-            ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_WRITE |
-                    ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps());
+            if (key.isValid()) {
+                SelectionKey otherkey = ((Connection) key.attachment()).getChannel().keyFor(key.selector());
+                if (otherkey!= null  && otherkey.isValid()) {
+                    ((Connection) key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_WRITE |
+                            ((Connection) key.attachment()).getChannel().keyFor(key.selector()).interestOps());
+                }
+            }
         }
     }
 
@@ -88,17 +125,29 @@ public class EchoSelectorProtocol implements TCPProtocol {
         ByteBuffer buf = ((Connection) key.attachment()).getSourceBuffer();
         buf.flip(); // Prepare buffer for writing
         SocketChannel channel = (SocketChannel) key.channel();
-        int written = channel.write(buf);
+        int written = 0;
+        try{
+            written = channel.write(buf);
+        }catch (IOException e){
+            channel.close();
+            e.printStackTrace();
+            key.cancel();
+        }
         if (!buf.hasRemaining()) { // Buffer completely written?
             // Nothing left, so no longer interested in writes
             key.interestOps(SelectionKey.OP_READ);
         }
         if (written > 0){
-            ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_READ |
-                    ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps());
+            SelectionKey otherkey = ((Connection)key.attachment()).getChannel().keyFor(key.selector());
+            if (otherkey.isValid()){
+                otherkey.interestOps(SelectionKey.OP_READ | otherkey.interestOps());
+                /*((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps(SelectionKey.OP_READ |
+                        ((Connection)key.attachment()).getChannel().keyFor(key.selector()).interestOps());   */
+            }
+
         }
 
-        //buf.flip(); after testing, determined it was not needed
+        //buf.flip();// after testing, determined it was not needed
         buf.compact(); // Make room for more data to be read in
     }
 }

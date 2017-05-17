@@ -49,7 +49,7 @@ public class TCPEchoClientNonblocking {
                                           // charset
                 new String(readBuf.array(), 0, totalBytesRcvd));
         Thread.sleep(35000);
-
+        System.out.println("Closed Connection");
         clntChan.close();
     }
 
